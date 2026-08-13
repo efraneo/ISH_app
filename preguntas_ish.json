@@ -1,0 +1,27 @@
+{
+  "Estructural": [
+    {"id": 1, "pregunta": "El edificio cumple con la norma sismo resistente NSR-10?"},
+    {"id": 2, "pregunta": "La estructura ha sido evaluada por un ingeniero en los últimos 5 años?"},
+    {"id": 3, "pregunta": "Existen fallas visibles en cimientos, columnas o muros de carga?"},
+    {"id": 4, "pregunta": "El suelo donde se asienta el hospital es estable?"},
+    {"id": 5, "pregunta": "Las ampliaciones/modificaciones respetaron el diseño estructural original?"}
+  ],
+  "No Estructural": [
+    {"id": 1, "pregunta": "Los cielos rasos y falsos techos están asegurados contra movimientos sísmicos?"},
+    {"id": 2, "pregunta": "Las instalaciones eléctricas cuentan con pozo a tierra y protección contra sobrecargas?"},
+    {"id": 3, "pregunta": "Las tuberías de agua y gases medicinales tienen uniones flexibles?"},
+    {"id": 4, "pregunta": "El equipo médico pesado (rayos X, resonadores) está anclado al piso o pared?"},
+    {"id": 5, "pregunta": "Los gabinetes contra incendio y extintores son accesibles y están señalizados?"},
+    {"id": 6, "pregunta": "Las ventanas y lucernarios cerca de áreas críticas son de material anti-adherente?"}
+  ],
+  "Funcional": [
+    {"id": 1, "pregunta": "Existe un Plan Hospitalario de Emergencia actualizado y socializado?"},
+    {"id": 2, "pregunta": "Se realizan simulacros al menos 2 veces al año?"},
+    {"id": 3, "pregunta": "El hospital cuenta con planta eléctrica de emergencia con autonomía de 72 horas?"},
+    {"id": 4, "pregunta": "Existen reservas de agua potable para 72 horas de operación normal?"},
+    {"id": 5, "pregunta": "El comité de emergencias y brigada está conformado y capacitado (365 trabajadores)?"},
+    {"id": 6, "pregunta": "Existen convenios con entidades de apoyo externo (bomberos, CRUED, tránsito)?"},
+    {"id": 7, "pregunta": "Hay un sistema de comunicación interno y externo redundante (radios, internet)?"},
+    {"id": 8, "pregunta": "Se cuenta con protocolos de evacuación, descontaminación y triage?"}
+  ]
+}
