@@ -143,8 +143,8 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'codigo_2fa_generado' not in st.session_state:
     st.session_state.codigo_2fa_generado = None
-if '2fa_timestamp' not in st.session_state:
-    st.session_state.2fa_timestamp = None
+if 'tfa_timestamp' not in st.session_state:  # <--- CORREGIDO AQUÍ
+    st.session_state.tfa_timestamp = None
 if 'correo_verificado' not in st.session_state:
     st.session_state.correo_verificado = False
 if 'correo_destino' not in st.session_state:
@@ -282,7 +282,7 @@ elif menu == "📥 Exportar & Envío 2FA (CRUED)":
                     codigo = random.randint(100000, 999999)
                     st.session_state.codigo_2fa_generado = codigo
                     st.session_state.correo_destino = correo_input
-                    st.session_state.2fa_timestamp = time.time() # Guardar tiempo exacto de generación
+                    st.session_state.tfa_timestamp = time.time() # <--- CORREGIDO AQUÍ
                     if enviar_correo_2fa(correo_input, codigo):
                         st.success("Código 2FA enviado al correo. Revisa tu bandeja de entrada (o spam).")
                 else:
@@ -290,8 +290,7 @@ elif menu == "📥 Exportar & Envío 2FA (CRUED)":
         
         # Paso 2: Verificar 2FA
         elif st.session_state.codigo_2fa_generado and not st.session_state.correo_verificado:
-            # Validar expiración del código
-            tiempo_transcurrido = time.time() - st.session_state.2fa_timestamp
+            tiempo_transcurrido = time.time() - st.session_state.tfa_timestamp  # <--- CORREGIDO AQUÍ
             tiempo_limite = int(st.secrets["TWO_FACTOR_EXPIRY_SECONDS"])
             
             if tiempo_transcurrido > tiempo_limite:
