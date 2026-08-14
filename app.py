@@ -11,7 +11,6 @@ import smtplib
 import time
 import hashlib
 import os
-from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -21,20 +20,29 @@ from openai import OpenAI
 # --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(page_title="ISH - Clínica San Rafael", page_icon="🏥", layout="wide")
 
-# --- BÚSQUEDA INTELIGENTE DE IMÁGENES (SOLUCIÓN DEFINITIVA) ---
-BASE_DIR = Path(__file__).parent
+# --- BÚSQUEDA INTELIGENTE DE IMÁGENES Y CARGA EN BYTES ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGO_CLINICA = None
 LOGO_VIGILADO = None
 
-# Buscamos en las carpetas posibles: assets, asset, o en la raíz
+def cargar_imagen_segura(ruta_relativa):
+    ruta_absoluta = os.path.join(BASE_DIR, ruta_relativa)
+    if os.path.exists(ruta_absoluta):
+        try:
+            with open(ruta_absoluta, "rb") as img_file:
+                return img_file.read()
+        except:
+            return None
+    return None
+
+# Buscamos en las carpetas posibles: assets, asset, o raíz
 for folder in ["assets", "asset", "."]:
-    ruta_logo = BASE_DIR / folder / "logo_clinica.png"
-    ruta_vigilado = BASE_DIR / folder / "vigilado.png"
-    
-    if ruta_logo.exists() and not LOGO_CLINICA:
-        LOGO_CLINICA = ruta_logo
-    if ruta_vigilado.exists() and not LOGO_VIGILADO:
-        LOGO_VIGILADO = ruta_vigilado
+    logo_temp = cargar_imagen_segura(os.path.join(folder, "logo_clinica.png"))
+    vigilado_temp = cargar_imagen_segura(os.path.join(folder, "vigilado.png"))
+    if logo_temp and not LOGO_CLINICA:
+        LOGO_CLINICA = logo_temp
+    if vigilado_temp and not LOGO_VIGILADO:
+        LOGO_VIGILADO = vigilado_temp
 
 # --- CONEXIÓN A SERVICIOS ---
 @st.cache_resource
@@ -212,10 +220,10 @@ if 'ai_analysis_cache' not in st.session_state: st.session_state.ai_analysis_cac
 if not st.session_state.logged_in:
     col_l, col_r = st.columns([1, 1])
     with col_l:
-        if LOGO_CLINICA: st.image(str(LOGO_CLINICA), width=150)
+        if LOGO_CLINICA: st.image(LOGO_CLINICA, width=150)
         else: st.error("Sube 'logo_clinica.png' a tu repo")
     with col_r:
-        if LOGO_VIGILADO: st.image(str(LOGO_VIGILADO), width=120)
+        if LOGO_VIGILADO: st.image(LOGO_VIGILADO, width=120)
         else: st.error("Sube 'vigilado.png' a tu repo")
 
     st.markdown("<h1 style='text-align: center; color: #0056b3;'>Acceso al Sistema</h1>", unsafe_allow_html=True)
@@ -279,13 +287,13 @@ if st.session_state.logged_in:
 # --- HEADER ---
 col1, col2, col3 = st.columns([1, 3, 1])
 with col1:
-    if LOGO_CLINICA: st.image(str(LOGO_CLINICA), use_container_width=True)
+    if LOGO_CLINICA: st.image(LOGO_CLINICA, width=120)
     else: st.warning("Logo no encontrado")
 with col2:
     st.markdown("<h1 style='text-align: center; margin-top: 20px;'>Índice de Seguridad Hospitalaria (ISH v2)</h1>", unsafe_allow_html=True)
     st.markdown(f"<h4 style='text-align: center; color: #6c757d;'>Bienvenido: <b>{st.session_state.user_name}</b></h4>", unsafe_allow_html=True)
 with col3:
-    if LOGO_VIGILADO: st.image(str(LOGO_VIGILADO), use_container_width=True)
+    if LOGO_VIGILADO: st.image(LOGO_VIGILADO, width=100)
     else: st.warning("Vigilado no encontrado")
 st.markdown("<hr>", unsafe_allow_html=True)
 
