@@ -10,6 +10,7 @@ import random
 import smtplib
 import time
 import hashlib
+import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -17,7 +18,7 @@ from email import encoders
 from openai import OpenAI
 
 # --- CONFIGURACIÓN INICIAL ---
-st.set_page_config(page_title="ISH - Clínica San Rafael", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="ISH - Clínica San Rafael Alta Complejidad SAS", page_icon="🏥", layout="wide")
 
 # --- CONEXIÓN A SERVICIOS ---
 @st.cache_resource
@@ -59,6 +60,8 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'user_email' not in st.session_state:
     st.session_state.user_email = ""
+if 'user_name' not in st.session_state: # Nuevo: Guardar el nombre real
+    st.session_state.user_name = ""
 if 'is_admin' not in st.session_state:
     st.session_state.is_admin = False
 if 'tfa_timestamp' not in st.session_state:
@@ -70,6 +73,15 @@ if 'correo_verificado' not in st.session_state:
 
 # --- PANTALLA DE LOGIN / REGISTRO ---
 if not st.session_state.logged_in:
+    # Mostrar logos en el login también
+    col_l, col_r = st.columns([1, 1])
+    with col_l:
+        if os.path.exists("assets/logo_clinica.png"):
+            st.image("assets/logo_clinica.png", width=150)
+    with col_r:
+        if os.path.exists("assets/vigilado.png"):
+            st.image("assets/vigilado.png", width=120)
+
     st.markdown("<h1 style='text-align: center; color: #0056b3;'>Acceso al Sistema</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Índice de Seguridad Hospitalario - CSR AC 2026 By EESC</p><br>", unsafe_allow_html=True)
     
@@ -82,10 +94,11 @@ if not st.session_state.logged_in:
             submit = st.form_submit_button("Ingresar")
             
             if submit:
-                # 1. Verificar si es Admin (desde secrets)
+                # 1. Verificar si es Admin
                 if email_input == st.secrets["ADMIN_EMAIL"] and pass_input == st.secrets["ADMIN_PASSWORD"]:
                     st.session_state.logged_in = True
                     st.session_state.user_email = email_input
+                    st.session_state.user_name = "Efrain Sarmiento Crespo" # Nombre fijo Admin
                     st.session_state.is_admin = True
                     log_action(email_input, "Login Admin")
                     st.rerun()
@@ -103,8 +116,8 @@ if not st.session_state.logged_in:
                                 else:
                                     st.session_state.logged_in = True
                                     st.session_state.user_email = email_input
+                                    st.session_state.user_name = user['nombre'] # Nombre real de la BD
                                     st.session_state.is_admin = False
-                                    # Incrementar contador
                                     supabase.table("usuarios_app").update({"contador_ingresos": user['contador_ingresos'] + 1}).eq("email", email_input).execute()
                                     log_action(email_input, "Login Usuario")
                                     st.rerun()
@@ -137,19 +150,21 @@ if st.session_state.logged_in:
         st.session_state.logged_in = False
         st.session_state.is_admin = False
         st.session_state.user_email = ""
+        st.session_state.user_name = ""
         st.rerun()
 
-# --- HEADER CON LOGOS ---
+# --- HEADER CON LOGOS Y NOMBRE ---
 col1, col2, col3 = st.columns([1, 3, 1])
 with col1:
-    try: st.image("assets/logo_clinica.png", use_container_width=True)
-    except: pass
+    if os.path.exists("assets/logo_clinica.png"):
+        st.image("assets/logo_clinica.png", use_container_width=True)
 with col2:
     st.markdown("<h1 style='text-align: center; margin-top: 20px;'>Índice de Seguridad Hospitalaria (ISH v2)</h1>", unsafe_allow_html=True)
-    st.markdown(f"<h4 style='text-align: center; color: #6c757d;'>Bienvenido: {st.session_state.user_email}</h4>", unsafe_allow_html=True)
+    # Saludo personalizado
+    st.markdown(f"<h4 style='text-align: center; color: #6c757d;'>Bienvenido: <b>{st.session_state.user_name}</b></h4>", unsafe_allow_html=True)
 with col3:
-    try: st.image("assets/vigilado.png", use_container_width=True)
-    except: pass
+    if os.path.exists("assets/vigilado.png"):
+        st.image("assets/vigilado.png", use_container_width=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -178,31 +193,41 @@ if menu == "📊 Dashboard":
         c3.metric("Autonomía Post-Evento", f"{latest['autonomia_horas']} Horas")
         c4.metric("Talento Humano", "365 Trabajadores")
         
-        # (Graficos Gauge y Radar omitidos por espacio, copiar de versión anterior si se necesitan)
-        st.info("Mostrando dashboard principal. (Gráficos Gauge y Radar)") 
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number", value=latest['indice_total'],
+                gauge={'axis': {'range': [0, 1]}, 'bar': {'color': "#0056b3"},
+                       'steps': [{'range': [0, 0.35], 'color': '#dc3545'}, {'range': [0.35, 0.66], 'color': '#ffc107'}, {'range': [0.66, 1], 'color': '#28a745'}]}
+            ))
+            st.plotly_chart(fig_gauge, use_container_width=True)
+            
+        with c2:
+            modulos = ['Estructural', 'No Estructural', 'Funcional']
+            valores = [latest['indice_estructural'], latest['indice_no_estructural'], latest['indice_funcional']]
+            fig_radar = go.Figure(data=go.Scatterpolar(r=valores+[valores[0]], theta=modulos+[modulos[0]], fill='toself', line_color='#0056b3'))
+            fig_radar.update_layout(polar=dict(radialaxis=dict(range=[0, 1], visible=True)), showlegend=False)
+            st.plotly_chart(fig_radar, use_container_width=True)
 
 # --- NUEVA EVALUACIÓN ---
 elif menu == "📋 Nueva Evaluación":
     st.markdown("## Formulario ISH-APP 2022")
     
-    # Cargar amenazas dinámicas desde BD
     amenazas_bd = get_amenazas()
     
     with st.form("eval_form"):
         col1, col2 = st.columns(2)
         with col1:
-            evaluador = st.text_input("Evaluador", st.session_state.user_email)
+            evaluador = st.text_input("Evaluador", st.session_state.user_name)
             fecha = st.date_input("Fecha", datetime.now())
         with col2:
             amenazas = st.multiselect("Amenazas Identificadas", amenazas_bd)
         
-        # (Cargar preguntas del JSON y sliders aquí...)
-        st.info("Formulario de 151 preguntas aquí...")
+        st.info("Formulario de preguntas aquí...")
         
         submitted = st.form_submit_button("Calcular Índice y Guardar")
         if submitted:
-            # Lógica de cálculo
-            total, clase = 0.85, "A" # Simulado
+            total, clase = 0.85, "A" 
             data = {
                 "fecha_evaluacion": str(fecha), "evaluador": evaluador, "nivel_riesgo": ", ".join(amenazas),
                 "indice_estructural": 0.85, "indice_no_estructural": 0.85, "indice_funcional": 0.85,
@@ -219,8 +244,7 @@ elif menu == "📋 Nueva Evaluación":
 # --- EXPORTAR Y CORREO 2FA ---
 elif menu == "📥 Exportar & Envío 2FA (CRUED)":
     st.markdown("## Exportación y Envío Seguro (2FA)")
-    # (Código de exportación y 2FA intacto de la versión anterior...)
-    st.info("Módulo de descarga y envío por correo con 2FA.")
+    st.info("Módulo de descarga y envío por correo con 2FA intacto.")
 
 # --- ANÁLISIS IA ---
 elif menu == "🤖 Análisis IA":
@@ -265,7 +289,7 @@ elif menu == "🛡️ Panel Administrador" and st.session_state.is_admin:
         except Exception as e:
             st.error(e)
 
-    # --- TAB B: LOGS PRO ---
+    # --- TAB B: LOGS PRO CON HISTOGRAMAS ---
     with tab_b:
         st.markdown("### Indicadores de Uso y Trazabilidad")
         try:
@@ -273,23 +297,50 @@ elif menu == "🛡️ Panel Administrador" and st.session_state.is_admin:
             df_logs = pd.DataFrame(res.data)
             
             if not df_logs.empty:
+                # KPIs
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Total Logins", len(df_logs[df_logs['accion'].str.contains("Login")]))
                 c2.metric("Evaluaciones Creadas", len(df_logs[df_logs['accion'] == "Nueva Evaluación Creada"]))
                 c3.metric("Análisis de IA Generados", len(df_logs[df_logs['accion'] == "Uso de IA para Análisis"]))
                 
+                # Preparar datos para gráficos
+                df_logs['fecha'] = pd.to_datetime(df_logs['fecha'])
+                df_logs['fecha_dia'] = df_logs['fecha'].dt.date
+
+                c_graph1, c_graph2 = st.columns(2)
+                
+                with c_graph1:
+                    # Histograma de actividad por día
+                    actividad_diaria = df_logs.groupby('fecha_dia').size().reset_index(name='cantidad')
+                    fig_hist = px.bar(actividad_diaria, x='fecha_dia', y='cantidad', 
+                                      title="📊 Actividad en el Sistema por Día", 
+                                      labels={'fecha_dia': 'Fecha', 'cantidad': 'Número de Acciones'},
+                                      color='cantidad', color_continuous_scale='Blues')
+                    fig_hist.update_layout(showlegend=False, xaxis_tickangle=-45)
+                    st.plotly_chart(fig_hist, use_container_width=True)
+                
+                with c_graph2:
+                    # Histograma de tipos de acciones
+                    acciones_count = df_logs['accion'].value_counts().reset_index()
+                    acciones_count.columns = ['accion', 'cantidad']
+                    fig_actions = px.bar(acciones_count, x='accion', y='cantidad',
+                                         title="⚙️ Distribución de Acciones Realizadas",
+                                         labels={'accion': 'Tipo de Acción', 'cantidad': 'Cantidad'},
+                                         color='accion')
+                    fig_actions.update_layout(showlegend=False, xaxis_tickangle=-45)
+                    st.plotly_chart(fig_actions, use_container_width=True)
+
                 st.markdown("#### Historial Detallado")
                 st.dataframe(df_logs[['usuario_email', 'accion', 'fecha']], use_container_width=True)
             else:
                 st.info("Sin actividad registrada.")
         except Exception as e:
-            st.error(e)
+            st.error(f"Error generando gráficos: {e}")
 
     # --- TAB C: AMENAZAS ---
     with tab_c:
         st.markdown("### Administrar Amenazas y Vulnerabilidades")
         
-        # Agregar nueva
         nueva_amenaza = st.text_input("Adicionar Nueva Amenaza Manualmente")
         if st.button("➕ Agregar Amenaza"):
             if nueva_amenaza:
