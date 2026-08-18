@@ -95,6 +95,17 @@ def calcular_indice(estructural, no_estructural, funcional):
         clase, msg = "C", "Baja probabilidad. Intervenciones urgentes requeridas."
     return total, clase, msg
 
+def get_evaluaciones_df():
+    try:
+        res = supabase.table("evaluaciones_ish").select("*").execute()
+        df = pd.DataFrame(res.data)
+        if not df.empty:
+            df['fecha_evaluacion'] = pd.to_datetime(df['fecha_evaluacion'])
+            df = df.sort_values(by='fecha_evaluacion', ascending=False).reset_index(drop=True)
+        return df
+    except:
+        return pd.DataFrame()
+
 # --- FUNCIÓN IA PRO (JSON Y RENDER NATIVO) ---
 def generar_informe_ia(latest_data):
     prompt = f"""
@@ -304,15 +315,13 @@ menu = st.sidebar.selectbox("Menú", opciones_menu)
 
 # --- DASHBOARD ---
 if menu == "📊 Dashboard":
-    try:
-        res = supabase.table("evaluaciones_ish").select("*").order("fecha_evaluacion", desc=True).execute()
-        df_eval = pd.DataFrame(res.data)
-    except: df_eval = pd.DataFrame()
+    df_eval = get_evaluaciones_df()
 
     if df_eval.empty:
         st.warning("No hay evaluaciones registradas aún.")
     else:
-        latest = df_eval.iloc[0]
+        latest = df_eval.iloc[0] # Siempre tomamos la primera fila (que ya ordenamos como la más reciente)
+        
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Índice Total", f"{latest['indice_total']:.2f}", delta=latest['clasificacion'])
         c2.metric("Clasificación OMS", latest['clasificacion'])
@@ -333,6 +342,14 @@ if menu == "📊 Dashboard":
             fig_radar = go.Figure(data=go.Scatterpolar(r=valores+[valores[0]], theta=modulos+[modulos[0]], fill='toself', line_color='#0056b3'))
             fig_radar.update_layout(polar=dict(radialaxis=dict(range=[0, 1], visible=True)), showlegend=False)
             st.plotly_chart(fig_radar, use_container_width=True)
+
+        # --- TABLA HISTÓRICA PRO ---
+        st.markdown("---")
+        st.markdown("### 📜 Historial de Evaluaciones Anteriores")
+        df_hist = df_eval[['fecha_evaluacion', 'evaluador', 'nivel_riesgo', 'indice_total', 'clasificacion']].copy()
+        df_hist['indice_total'] = df_hist['indice_total'].apply(lambda x: f"{x:.2f}")
+        df_hist.columns = ['Fecha y Hora', 'Evaluador', 'Amenazas', 'Índice Total', 'Clasificación']
+        st.dataframe(df_hist, use_container_width=True, hide_index=True)
 
         st.markdown("---")
         if st.session_state.ai_analysis_cache:
@@ -360,7 +377,7 @@ elif menu == "📋 Nueva Evaluación":
         col1, col2 = st.columns(2)
         with col1:
             evaluador = st.text_input("Evaluador", st.session_state.user_name)
-            fecha = st.date_input("Fecha", datetime.now())
+            fecha = st.date_input("Fecha de Evaluación", datetime.now())
         with col2:
             amenazas = st.multiselect("Amenazas Identificadas", amenazas_bd)
         
@@ -379,8 +396,11 @@ elif menu == "📋 Nueva Evaluación":
             func = sum(func_vals)/len(func_vals) if func_vals else 0
             total, clase, msg = calcular_indice(est, no_est, func)
             
+            # Guardamos con fecha y hora exacta (datetime.now()) para que el orden cronológico funcione perfecto
             data = {
-                "fecha_evaluacion": str(fecha), "evaluador": evaluador, "nivel_riesgo": ", ".join(amenazas),
+                "fecha_evaluacion": str(datetime.now()), 
+                "evaluador": evaluador, 
+                "nivel_riesgo": ", ".join(amenazas),
                 "indice_estructural": est, "indice_no_estructural": no_est, "indice_funcional": func,
                 "indice_total": total, "clasificacion": clase, "autonomia_horas": 72 if clase == 'A' else (24 if clase == 'B' else 0)
             }
@@ -396,10 +416,7 @@ elif menu == "📋 Nueva Evaluación":
 # --- EXPORTAR ---
 elif menu == "📥 Exportar & Envío 2FA":
     st.markdown("## Exportación y Envío Seguro (2FA)")
-    try:
-        res = supabase.table("evaluaciones_ish").select("*").execute()
-        df_eval = pd.DataFrame(res.data)
-    except: df_eval = pd.DataFrame()
+    df_eval = get_evaluaciones_df()
 
     if not df_eval.empty:
         output = io.BytesIO()
@@ -452,18 +469,20 @@ elif menu == "🤖 Análisis IA":
     st.markdown("## 🤖 Análisis con Inteligencia Artificial")
     if st.button("⚡ Generar Diagnóstico"):
         with st.spinner("Analizando..."):
-            try:
-                res = supabase.table("evaluaciones_ish").select("*").order("fecha_evaluacion", desc=True).limit(1).execute()
-                if res.data:
-                    st.session_state.ai_analysis_cache = generar_informe_ia(res.data[0])
+            df_eval = get_evaluaciones_df()
+            if not df_eval.empty:
+                try:
+                    st.session_state.ai_analysis_cache = generar_informe_ia(df_eval.iloc[0])
                     log_action(st.session_state.user_email, "Uso de IA para Análisis")
                     st.rerun()
-            except Exception as e: st.error(f"Error: {e}")
+                except Exception as e: st.error(f"Error: {e}")
 
 # --- ADMIN ---
 elif menu == "🛡️ Panel Administrador" and st.session_state.is_admin:
     st.markdown("# 🛡️ Panel de Administración PRO")
-    tab_a, tab_b, tab_c = st.tabs(["👥 Usuarios", "📊 Logs", "⚠️ Amenazas"])
+    tab_a, tab_b, tab_c, tab_d = st.tabs(["👥 Usuarios", "📊 Logs", "⚠️ Amenazas", "📝 Editar Evaluaciones"])
+    
+    # Editar Usuarios
     with tab_a:
         try:
             res = supabase.table("usuarios_app").select("*").execute()
@@ -481,6 +500,8 @@ elif menu == "🛡️ Panel Administrador" and st.session_state.is_admin:
                             st.rerun()
             else: st.info("Sin usuarios.")
         except Exception as e: st.error(e)
+        
+    # Logs
     with tab_b:
         try:
             res = supabase.table("logs_usuarios").select("*").order("fecha", desc=True).execute()
@@ -503,6 +524,8 @@ elif menu == "🛡️ Panel Administrador" and st.session_state.is_admin:
                 st.dataframe(df_logs[['usuario_email', 'accion', 'fecha']], use_container_width=True)
             else: st.info("Sin actividad.")
         except Exception as e: st.error(e)
+        
+    # Amenazas
     with tab_c:
         nueva = st.text_input("Adicionar Nueva Amenaza")
         if st.button("➕ Agregar"):
@@ -514,3 +537,39 @@ elif menu == "🛡️ Panel Administrador" and st.session_state.is_admin:
                 except: st.error("Ya existe.")
         st.markdown("---")
         st.dataframe(pd.DataFrame(get_amenazas(), columns=["Amenazas Configuradas"]), use_container_width=True, height=400)
+
+    # Editar Evaluaciones
+    with tab_d:
+        st.markdown("### 📝 Editar Registros de Evaluaciones")
+        st.warning("Modifique los campos necesarios y guarde los cambios. Se actualizará en la base de datos en tiempo real.")
+        
+        df_eval = get_evaluaciones_df()
+        if not df_eval.empty:
+            for index, row in df_eval.iterrows():
+                with st.expander(f"Evaluación del {row['fecha_evaluacion'].strftime('%Y-%m-%d %H:%M')} - Índice: {row['indice_total']:.2f}"):
+                    e_c1, e_c2 = st.columns(2)
+                    with e_c1:
+                        e_eval = st.text_input("Evaluador", row['evaluador'], key=f"e_eval_{row['id']}")
+                        e_riesgo = st.text_input("Amenazas", row['nivel_riesgo'], key=f"e_riesgo_{row['id']}")
+                        e_total = st.number_input("Índice Total", 0.0, 1.0, float(row['indice_total']), 0.01, key=f"e_total_{row['id']}")
+                    with e_c2:
+                        e_clase = st.selectbox("Clasificación", ["A", "B", "C"], index=["A", "B", "C"].index(row['clasificacion']), key=f"e_clase_{row['id']}")
+                        e_est = st.number_input("Índice Estructural", 0.0, 1.0, float(row['indice_estructural']), 0.01, key=f"e_est_{row['id']}")
+                        e_noest = st.number_input("Índice No Estructural", 0.0, 1.0, float(row['indice_no_estructural']), 0.01, key=f"e_noest_{row['id']}")
+                        e_func = st.number_input("Índice Funcional", 0.0, 1.0, float(row['indice_funcional']), 0.01, key=f"e_func_{row['id']}")
+                        e_auto = st.number_input("Autonomía (Horas)", 0, 72, int(row['autonomia_horas']), key=f"e_auto_{row['id']}")
+
+                    if st.button("💾 Guardar Cambios en esta Evaluación", key=f"e_btn_{row['id']}"):
+                        update_data = {
+                            "evaluador": e_eval, "nivel_riesgo": e_riesgo, "indice_total": e_total,
+                            "clasificacion": e_clase, "indice_estructural": e_est, "indice_no_estructural": e_noest,
+                            "indice_funcional": e_func, "autonomia_horas": e_auto
+                        }
+                        try:
+                            supabase.table("evaluaciones_ish").update(update_data).eq("id", row['id']).execute()
+                            st.success("Evaluación actualizada en la base de datos.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al actualizar: {e}")
+        else:
+            st.info("No hay evaluaciones registradas para editar.")
